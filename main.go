@@ -66,7 +66,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 	// START ADD
 
 	//CALL IPAM PLUGIN==================================================================================================
-	configString := arrbyteToString(args.StdinData) //StdinData è un array di byte..
+	configString := arrbyteToString(args.StdinData) //StdinData è un array di byte...
 	ipamOutput, err := callIpamPlugin(configString, args.ContainerID, args.Netns, args.IfName, "ADD")
 	var ipamOutputJson map[string]interface{}
 	ipamOutputStr, err := json.MarshalIndent(ipamOutputJson, "", "  ")
