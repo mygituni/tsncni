@@ -284,7 +284,7 @@ func setPodPort(port string, podNetNamespace string, ip string, cidr string, gw 
 	if err != nil {
 		return
 	}
-	// TO DO:  MAC da leggere per metterlo in output JSON, SETTA MTU, RINOMINA INTERFACCIA CON NOME DATO DA PARAMETRO,
+	// TO DO:  MAC da leggere per metterlo in output JSON
 
 }
 
