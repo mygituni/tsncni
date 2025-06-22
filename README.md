@@ -1,0 +1,1 @@
+Questo repository contiene il materiale sviluppato e utilizzato per la mia tesi di laurea incentrata sull'integrazione del Time-Sensitive Networking (TSN) in ambienti Kubernetes tramite lo sviluppo di un plugin CNI custom.
