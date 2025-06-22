@@ -1,4 +1,4 @@
-// K8S TSNCNI PLUGIN Andrea Barigazzi
+// K8S TSN-CNI PLUGIN for KuberneTSN Andrea Barigazzi  CNI spec 1.1.0
 package main
 
 import (
@@ -36,11 +36,11 @@ func setupLogger(logFilePath string) (*log.Logger, error) {
 type PluginConf struct {
 	types.NetConf
 	RuntimeConfig *struct {
-		SampleConfig map[string]interface{} `json:"sample"`
+		RunConfig map[string]interface{} `json:"sample"`
 	} `json:"runtimeConfig"`
-	// Plugin-specific flags
-	MyAwesomeFlag     bool   `json:"myAwesomeFlag"`
-	AnotherAwesomeArg string `json:"anotherAwesomeArg"`
+	// Plugin-specific
+	OvsBridge    string `json:"OvsBridge"`
+	ProvisionOvs bool   `json:"ProvisionOvs"`
 }
 
 func parseConfig(stdin []byte) (*PluginConf, error) {
@@ -48,11 +48,8 @@ func parseConfig(stdin []byte) (*PluginConf, error) {
 	if err := json.Unmarshal(stdin, &conf); err != nil {
 		return nil, fmt.Errorf("failed to parse network configuration: %v", err)
 	}
-	if err := version.ParsePrevResult(&conf.NetConf); err != nil {
-		return nil, fmt.Errorf("could not parse prevResult: %v", err)
-	}
-	if conf.AnotherAwesomeArg == "" {
-		return nil, fmt.Errorf("anotherAwesomeArg must be specified")
+	if conf.OvsBridge == "" {
+		return nil, fmt.Errorf("OvsBridge must be specified")
 	}
 	return &conf, nil
 }
@@ -63,8 +60,6 @@ func cmdAdd(args *skel.CmdArgs) error {
 	if err != nil {
 		return err
 	}
-	// START ADD
-
 	//CALL IPAM PLUGIN==================================================================================================
 	configString := arrbyteToString(args.StdinData) //StdinData è un array di byte...
 	ipamOutput, err := callIpamPlugin(configString, args.ContainerID, args.Netns, args.IfName, "ADD")
@@ -75,7 +70,6 @@ func cmdAdd(args *skel.CmdArgs) error {
 		return err
 	}
 	logger.Printf("IPAM HOST-LOCAL OUTPUT JSON:\n%s", string(ipamOutputStr))
-
 	//endCALL IPAM =====================================================================================================
 
 	// CHECK IF CHAINED PLUGIN
@@ -87,15 +81,14 @@ func cmdAdd(args *skel.CmdArgs) error {
 	// Check OVS status, create if needed...
 	//assert_or_create_ovs_bridge()    TODO
 	//==================================================================================================================
-	// get ip, cidr and gw from ipam output
 	err = json.Unmarshal([]byte(ipamOutput), &ipamOutputJson)
 	if err != nil {
 		return err
 	}
-	ip, cidr, gw, _ := getIpamNetData(ipamOutputJson)
+	ip, cidr, gw, _ := getIpamNetData(ipamOutputJson) // get ip, cidr and gw from ipam output
 	cidrInt, _ := strconv.Atoi(cidr)
-	bridge := "br-int"
-	ofPortNum := "1" //
+	bridge := conf.OvsBridge
+	ofPortNum := "1" // openflow port, dinamico?
 	podNetNamespace := args.Netns
 
 	logger.Printf("Ipam plugin result: %v %v %v", ip, cidr, gw)
@@ -116,7 +109,7 @@ func cmdAdd(args *skel.CmdArgs) error {
 		{
 			Name:    containerPort,
 			Sandbox: args.Netns,
-			Mac:     "00:11:22:33:44:55",
+			Mac:     "00:11:22:33:44:55", //questo è solo print, il MAC reale va letto e restituito
 		},
 	}
 	result.IPs = []*current.IPConfig{
@@ -140,19 +133,54 @@ func cmdDel(args *skel.CmdArgs) error {
 	if err != nil {
 		return err
 	}
-	_ = conf
-	//Delete veth from OVS bridge=======================================================================================
-	bridge := "br-int"
+	//Delete veth inside container===================================================
+	// Verifica se netns è vuoto il container è già stato eliminato
+	if args.Netns == "" {
+		logger.Printf("Il namespace di rete non esiste più, nessuna azione necessaria.")
+	} else {
+		// Verifica se il namespace esiste prima di tentare di rimuovere l'interfaccia
+		cmd := exec.Command("nsenter", "--net="+args.Netns, "ip", "link", "show")
+		if err := cmd.Run(); err != nil {
+			// Se il comando fallisce, significa che il namespace non esiste
+			logger.Printf("Il namespace di rete %s non esiste. Nessuna azione necessaria.", args.Netns)
+		} else {
+			// Se il namespace esiste, procedi con la rimozione dell'interfaccia
+			cmd = exec.Command("nsenter", "--net="+args.Netns, "ip", "link", "delete", args.IfName)
+			if err := cmd.Run(); err != nil {
+				logger.Printf("Errore durante la rimozione dell'interfaccia %s: %v", args.IfName, err)
+			}
+		}
+	}
+	//Delete veth from OVS bridge=====================================================
+	// Delete veth from OVS bridge=====================================================
+	bridge := conf.OvsBridge
 	containerId := args.ContainerID
 	id := containerId[len(containerId)-8:]
 	ovsPort := "veth" + id
-	// delete veth port in OVS bridge
-	cmd := exec.Command("ovs-vsctl", "del-port", bridge, ovsPort)
-	err = cmd.Run()
-	if err != nil {
-		return err
+
+	// Verifica se il bridge esiste
+	cmd := exec.Command("ovs-vsctl", "list-br", bridge)
+	if err := cmd.Run(); err != nil {
+		logger.Printf("Il bridge OVS %s non esiste. Nessuna azione necessaria per la porta %s.", bridge, ovsPort)
+	} else {
+		// Verifica se la porta esiste nel bridge
+		cmd = exec.Command("ovs-vsctl", "list-ports", bridge)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			logger.Printf("Errore durante la verifica delle porte del bridge %s: %v", bridge, err)
+		} else if !strings.Contains(string(output), ovsPort) {
+			// Se la porta non esiste, non fare nulla
+			logger.Printf("La porta %s non esiste nel bridge %s. Nessuna azione necessaria.", ovsPort, bridge)
+		} else {
+			// Se il bridge e la porta esistono, cancella la porta dal bridge
+			cmd = exec.Command("ovs-vsctl", "del-port", bridge, ovsPort)
+			if err := cmd.Run(); err != nil {
+				logger.Printf("Errore durante la rimozione della porta %s dal bridge %s: %v", ovsPort, bridge, err)
+			} else {
+				logger.Printf("Deleted port %v from ovs bridge %v.", ovsPort, bridge)
+			}
+		}
 	}
-	logger.Printf("Deleted port %v from ovs bridge %v.", ovsPort, bridge)
 	//==================================================================================================================
 	//libera IP assegnato dal plugin IPAM
 	configString := arrbyteToString(args.StdinData)
@@ -162,7 +190,7 @@ func cmdDel(args *skel.CmdArgs) error {
 }
 
 func main() {
-	bv.BuildVersion = "1.0.1-beta"
+	bv.BuildVersion = "1.0"
 	skel.PluginMainFuncs(skel.CNIFuncs{
 		Add:    cmdAdd,
 		Check:  cmdCheck,
@@ -256,9 +284,7 @@ func setPodPort(port string, podNetNamespace string, ip string, cidr string, gw 
 	if err != nil {
 		return
 	}
-	// TO DO:  MAC RANDOMIZZATO, SETTA MTU, RINOMINA INTERFACCIA CON NOME DATO DA PARAMETRO, RICEVI DA PARAMETRO ANCHE
-	// NOME DEL BRIDGE OVS, SE NON ESISTE VALUTA SE CREARLO IN AUTOMATICO, FARE SCRIPT PER OGNI NODO CHE FA
-	//SETUP DI TUTTO l'OVS DPDK ETC ETC...
+	// TO DO:  MAC da leggere per metterlo in output JSON, SETTA MTU, RINOMINA INTERFACCIA CON NOME DATO DA PARAMETRO,
 
 }
 
