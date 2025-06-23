@@ -1,1 +1,1 @@
-https://hub.docker.com/repository/docker/andreab1081/ktsnd/general
+https://hub.docker.com/r/andreab1081/ktsnd/tags
