@@ -1,3 +1,4 @@
+# Versione con Nodo1: ktsnd + tsnperf  e Nodo2 ktsnd +tsnperf  per futuri test multi-hop
 apiVersion: v1
 kind: Pod
 metadata:

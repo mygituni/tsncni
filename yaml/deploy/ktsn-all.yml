@@ -1,3 +1,4 @@
+# Versione Nodo1: ktsnd + tsperf e Nodo2: tsperf  per test PTP
 apiVersion: v1
 kind: Pod
 metadata:
