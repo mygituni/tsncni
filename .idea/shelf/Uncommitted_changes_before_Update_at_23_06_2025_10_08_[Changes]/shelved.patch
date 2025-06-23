@@ -1,0 +1,6 @@
+diff --git a/main.go b/plugin/src/main.go
+rename from main.go
+rename to plugin/src/main.go
+diff --git a/go.mod b/plugin/src/go.mod
+rename from go.mod
+rename to plugin/src/go.mod

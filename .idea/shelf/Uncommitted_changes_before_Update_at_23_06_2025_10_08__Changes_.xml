@@ -1,0 +1,9 @@
+<changelist name="Uncommitted_changes_before_Update_at_23_06_2025_10_08_[Changes]" date="1750666087045" recycled="true" deleted="true">
+  <option name="PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_23_06_2025_10_08_[Changes]/shelved.patch" />
+  <option name="DESCRIPTION" value="Uncommitted changes before Update at 23/06/2025 10:08 [Changes]" />
+  <binary>
+    <option name="BEFORE_PATH" value="go.sum" />
+    <option name="AFTER_PATH" value="plugin/src/go.sum" />
+    <option name="SHELVED_PATH" value="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_23_06_2025_10_08_[Changes]/go.sum" />
+  </binary>
+</changelist>
