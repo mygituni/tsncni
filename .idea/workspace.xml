@@ -4,9 +4,7 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d71cca4b-ba0c-4d93-8efc-63698af3f1e8" name="Changes" comment="Last">
-      <change beforePath="$PROJECT_DIR$/plugin/tsncni" beforeDir="false" afterPath="$PROJECT_DIR$/plugin/tsncni" afterDir="false" />
-    </list>
+    <list default="true" id="d71cca4b-ba0c-4d93-8efc-63698af3f1e8" name="Changes" comment="Last" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
