@@ -4,10 +4,7 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d71cca4b-ba0c-4d93-8efc-63698af3f1e8" name="Changes" comment="Last">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/plugin/src/main.go" beforeDir="false" afterPath="$PROJECT_DIR$/plugin/src/main.go" afterDir="false" />
-    </list>
+    <list default="true" id="d71cca4b-ba0c-4d93-8efc-63698af3f1e8" name="Changes" comment="Last" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />

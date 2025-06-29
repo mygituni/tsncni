@@ -332,7 +332,7 @@ func setPodPort(port string, podNetNamespace string, ip string, cidr string, gw 
 	if err != nil {
 		return "", fmt.Errorf("failed to get current ns: %v", err)
 	}
-	// Defer che silenzia l'errore di Close
+	// Silenzio l'errore di Close
 	defer func() { _ = currNs.Close() }()
 
 	// Entra nel namespace del Pod
@@ -340,12 +340,15 @@ func setPodPort(port string, podNetNamespace string, ip string, cidr string, gw 
 	if err != nil {
 		return "", fmt.Errorf("failed to open pod netns %s: %v", podNetNamespace, err)
 	}
-	defer podNs.Close()
+	// Silenzio l'errore di Close su podNs
+	defer func() { _ = podNs.Close() }()
 
+	// Cambia namespace (silenzio eventuale errore di Set)
 	if err := netns.Set(podNs); err != nil {
 		return "", fmt.Errorf("failed to enter pod ns: %v", err)
 	}
-	defer netns.Set(currNs) // ritorna al namespace host
+	// Assicuro il ritorno al namespace host, silenziando l'errore
+	defer func() { _ = netns.Set(currNs) }()
 
 	// Leggi l'interfaccia e il suo MAC
 	link, err := netlink.LinkByName(port)
