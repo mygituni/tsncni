@@ -11,6 +11,8 @@ import (
 	"github.com/containernetworking/cni/pkg/version"
 	"github.com/containernetworking/plugins/pkg/ipam"
 	bv "github.com/containernetworking/plugins/pkg/utils/buildversion"
+	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netns"
 	"log"
 	"net"
 	"os"
@@ -101,15 +103,19 @@ func cmdAdd(args *skel.CmdArgs) error {
 	logger.Printf("container_port: %v", containerPort)
 
 	setOvsPort(bridge, ovsPort, ofPortNum)
-	setPodPort(containerPort, podNetNamespace, ip, cidr, gw)
+	//setPodPort(containerPort, podNetNamespace, ip, cidr, gw)
 
+	realMac, err := setPodPort(containerPort, podNetNamespace, ip, cidr, gw)
+	if err != nil {
+		return err
+	}
 	// add to the result
 	result := &current.Result{CNIVersion: current.ImplementedSpecVersion}
 	result.Interfaces = []*current.Interface{
 		{
 			Name:    containerPort,
 			Sandbox: args.Netns,
-			Mac:     "00:11:22:33:44:55", //questo è solo print, il MAC reale va letto e restituito
+			Mac:     realMac, //"00:11:22:33:44:55", //questo è solo print, il MAC reale va letto e restituito
 		},
 	}
 	result.IPs = []*current.IPConfig{
@@ -190,7 +196,7 @@ func cmdDel(args *skel.CmdArgs) error {
 }
 
 func main() {
-	bv.BuildVersion = "1.0"
+	bv.BuildVersion = "1.0m"
 	skel.PluginMainFuncs(skel.CNIFuncs{
 		Add:    cmdAdd,
 		Check:  cmdCheck,
@@ -245,47 +251,111 @@ func setOvsPort(bridge string, port string, ofPortNum string) {
 	}
 }
 
-func setPodPort(port string, podNetNamespace string, ip string, cidr string, gw string) {
-	// Usa nsenter per eseguire i comandi all'interno del network namespace del pod
-	//==================================================================================================================
-	//"sposta" la veth_p dal nodo host al network namespace del pod:
-	// es ip link set vethabfca85d_p netns /var/run/netns/cni-dadb64d0-695e-856a-4141-204e61c9e778
+/*
+	func setPodPort(port string, podNetNamespace string, ip string, cidr string, gw string) {
+		// Usa nsenter per eseguire i comandi all'interno del network namespace del pod
+		//==================================================================================================================
+		//"sposta" la veth_p dal nodo host al network namespace del pod:
+		// es ip link set vethabfca85d_p netns /var/run/netns/cni-dadb64d0-695e-856a-4141-204e61c9e778
+		cmd := exec.Command("ip", "link", "set", port, "netns", podNetNamespace)
+		err := cmd.Run()
+		if err != nil {
+			return
+		}
+		//==================================================================================================================
+		// Abilita interfaccia
+		cmd = exec.Command("nsenter", "--net="+podNetNamespace, "ip", "link", "set", port, "up")
+		err = cmd.Run()
+		if err != nil {
+			return
+		}
+		//==================================================================================================================
+		// Aggiungi IP all'interfaccia
+		cmd = exec.Command("nsenter", "--net="+podNetNamespace, "ip", "addr", "add", ip+"/"+cidr, "dev", port)
+		err = cmd.Run()
+		if err != nil {
+			return
+		}
+		//==================================================================================================================
+		// Aggiungi la rotta predefinita
+		cmd = exec.Command("nsenter", "--net="+podNetNamespace, "ip", "route", "add", "default", "via", gw)
+		err = cmd.Run()
+		if err != nil {
+			return
+		}
+		//==================================================================================================================
+		// Disable offload for the specified interface 	ip netns exec $PID ethtool --offload $PORTNAME rx off tx off
+		// va installato ethtool nel container...
+		cmd = exec.Command("nsenter", "--net="+podNetNamespace, "ethtool", "--offload", port, "rx", "off", "tx", "off")
+		err = cmd.Run()
+		if err != nil {
+			return
+		}
+		// TO DO:  MAC da leggere per metterlo in output JSON
+
+}
+*/
+func setPodPort(port string, podNetNamespace string, ip string, cidr string, gw string) (string, error) {
+	// Sposta la veth_p nel namespace del Pod
 	cmd := exec.Command("ip", "link", "set", port, "netns", podNetNamespace)
-	err := cmd.Run()
-	if err != nil {
-		return
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("failed to move %s to netns %s: %v", port, podNetNamespace, err)
 	}
-	//==================================================================================================================
+
 	// Abilita interfaccia
 	cmd = exec.Command("nsenter", "--net="+podNetNamespace, "ip", "link", "set", port, "up")
-	err = cmd.Run()
-	if err != nil {
-		return
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("failed to set %s up: %v", port, err)
 	}
-	//==================================================================================================================
-	// Aggiungi IP all'interfaccia
-	cmd = exec.Command("nsenter", "--net="+podNetNamespace, "ip", "addr", "add", ip+"/"+cidr, "dev", port)
-	err = cmd.Run()
-	if err != nil {
-		return
-	}
-	//==================================================================================================================
-	// Aggiungi la rotta predefinita
-	cmd = exec.Command("nsenter", "--net="+podNetNamespace, "ip", "route", "add", "default", "via", gw)
-	err = cmd.Run()
-	if err != nil {
-		return
-	}
-	//==================================================================================================================
-	// Disable offload for the specified interface 	ip netns exec $PID ethtool --offload $PORTNAME rx off tx off
-	// va installato ethtool nel container...
-	cmd = exec.Command("nsenter", "--net="+podNetNamespace, "ethtool", "--offload", port, "rx", "off", "tx", "off")
-	err = cmd.Run()
-	if err != nil {
-		return
-	}
-	// TO DO:  MAC da leggere per metterlo in output JSON
 
+	// Aggiungi IP
+	cmd = exec.Command("nsenter", "--net="+podNetNamespace,
+		"ip", "addr", "add", ip+"/"+cidr, "dev", port)
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("failed to add IP to %s: %v", port, err)
+	}
+
+	// Aggiungi rotta predefinita
+	cmd = exec.Command("nsenter", "--net="+podNetNamespace,
+		"ip", "route", "add", "default", "via", gw)
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("failed to add route in pod ns: %v", err)
+	}
+
+	// Disabilita offload (opzionale)
+	_ = exec.Command("nsenter", "--net="+podNetNamespace,
+		"ethtool", "--offload", port, "rx", "off", "tx", "off").Run()
+
+	// --- Recupero del MAC reale nel namespace del Pod ---
+	// Salva namespace corrente
+	currNs, err := netns.Get()
+	if err != nil {
+		return "", fmt.Errorf("failed to get current ns: %v", err)
+	}
+	// Defer che silenzia l'errore di Close
+	defer func() { _ = currNs.Close() }()
+
+	// Entra nel namespace del Pod
+	podNs, err := netns.GetFromPath(podNetNamespace)
+	if err != nil {
+		return "", fmt.Errorf("failed to open pod netns %s: %v", podNetNamespace, err)
+	}
+	defer podNs.Close()
+
+	if err := netns.Set(podNs); err != nil {
+		return "", fmt.Errorf("failed to enter pod ns: %v", err)
+	}
+	defer netns.Set(currNs) // ritorna al namespace host
+
+	// Leggi l'interfaccia e il suo MAC
+	link, err := netlink.LinkByName(port)
+	if err != nil {
+		return "", fmt.Errorf("failed to lookup link %s: %v", port, err)
+	}
+	realMac := link.Attrs().HardwareAddr.String()
+	// ----------------------------------------------------
+
+	return realMac, nil
 }
 
 func arrbyteToString(bs []byte) string {
