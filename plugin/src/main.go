@@ -317,7 +317,7 @@ func setPodPort(port string, podNetNamespace string, ip string, cidr string, gw 
 
 	// Aggiungi rotta predefinita
 	cmd = exec.Command("nsenter", "--net="+podNetNamespace,
-		"ip", "route", "add", "default", "via", gw)
+		"ip", "route", "replace", "default", "via", gw)
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("failed to add route in pod ns: %v", err)
 	}
